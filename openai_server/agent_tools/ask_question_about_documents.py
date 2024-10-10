@@ -8,6 +8,15 @@ if 'src' not in sys.path:
     sys.path.append('src')
 
 
+def has_gpu():
+    import subprocess
+    try:
+        result = subprocess.run(['nvidia-smi'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
+
+
 def get_rag_answer(prompt, text_context_list=None, image_files=None, chat_conversation=None,
                    model=None,
                    system_prompt=None,
@@ -95,7 +104,9 @@ def main():
     parser.add_argument("-b", "--baseline", required=False, action='store_true',
                         help="Whether to get baseline from user docs")
     parser.add_argument("--files", nargs="+", required=False,
-                        help="Files of documents as textual files with optionally additional images")
+                        help="Files of documents with optionally additional images to ask question about.")
+    parser.add_argument("--urls", nargs="+", required=False,
+                        help="URLs to ask question about")
     parser.add_argument("-m", "--model", type=str, required=False, help="OpenAI or Open Source model to use")
     parser.add_argument("--max_time", type=float, required=False, default=default_max_time,
                         help="Maximum time to wait for response")
@@ -124,20 +135,73 @@ def main():
         ".html": "HTML File",
         ".mhtml": "MHTML File",
         ".htm": "HTML File",
-        ".xml": "XML"
+        ".xml": "XML",
+        ".json": "JSON",
+        ".yaml": "YAML",
+        ".yml": "YAML",
+        ".ini": "INI configuration file",
+        ".log": "Log file",
+        ".tex": "LaTeX",
+        ".sql": "SQL file",
+        ".sh": "Shell script",
+        ".bat": "Batch file",
+        ".js": "JavaScript",
+        ".css": "Cascading Style Sheets",
+        ".php": "PHP",
+        ".jsp": "Java Server Pages",
+        ".pl": "Perl script",
+        ".r": "R script",
+        ".lua": "Lua script",
+        ".conf": "Configuration file",
+        ".properties": "Java Properties file",
+        ".tsv": "Tab-Separated Values file",
+        ".xhtml": "XHTML file",
+        ".srt": "Subtitle file (SRT)",
+        ".vtt": "WebVTT file",
+        ".cpp": "C++ Source file",
+        ".c": "C Source file",
+        ".h": "C/C++ Header file",
+        ".go": "Go Source file",
     }
 
-    if args.files:
-        from src.vision.utils_vision import IMAGE_EXTENSIONS
-        text_context_list = []
-        for filename in args.files:
-            if any(filename.endswith(x) for x in textual_like_files.keys()):
+    if not args.baseline:
+        # have_gpu = has_gpu()
+        # too slow for now to do DocTR even if have GPU
+        have_gpu = False
+    else:
+        # h2oGPTe defaults to as if no GPU for baseline to be consistent
+        have_gpu = False
+
+    files = args.files or []
+    urls = args.urls or []
+    if files + urls:
+        from src.enums import IMAGE_EXTENSIONS
+        for filename in files + urls:
+            if any(filename.lower().endswith(x.lower()) for x in textual_like_files.keys()):
                 with open(filename, "rt") as f:
                     text_context_list.append(f.read())
             elif any(filename.endswith(x) for x in IMAGE_EXTENSIONS):
                 image_files.append(filename)
             else:
-                print(f"Unable to handle file type for {filename}")
+                from src.function_client import get_data_h2ogpt
+                sources1, known_type = get_data_h2ogpt(filename,
+                                                       is_url=filename in urls,
+                                                       verbose=False,
+                                                       use_unstructured_pdf='off',  # always slow and not better
+                                                       enable_pdf_ocr='off',  # always slow
+                                                       enable_pdf_doctr='off' if not have_gpu else 'on',
+                                                       # FIXME: requires GPU to be fast
+                                                       enable_captions=have_gpu,  # FIXME: requires GPU to be fast
+                                                       enable_llava=False,  # unused
+                                                       enable_transcriptions=have_gpu,
+                                                       # FIXME: requires GPU to be fast, and have separate STT tool
+                                                       # hf_embedding_model='fake'  # already fake if GPU is off on server
+                                                       )
+
+                if not sources1:
+                    print(f"Unable to handle file type for {filename}")
+                else:
+                    text_context_list.extend([x.page_content for x in sources1])
 
     rag_kwargs = dict(text_context_list=text_context_list,
                       image_files=image_files,
@@ -149,10 +213,20 @@ def main():
     print("<simple_rag_answer>")
     rag_answer = get_rag_answer(args.prompt, **rag_kwargs)
     print("</simple_rag_answer>")
-    if rag_answer:
+    if rag_answer and args.baseline:
         print(
             "The above simple_rag_answer answer may be correct, but the answer probably requires validation via checking the documents for similar text or search and news APIs if involves recent events.  Note that the LLM answering above has no coding capability or internet access so disregard its concerns about that if it mentions it.")
 
 
 if __name__ == "__main__":
     main()
+
+
+"""
+Examples:
+
+wget https://aiindex.stanford.edu/wp-content/uploads/2024/04/HAI_2024_AI-Index-Report.pdf
+H2OGPT_AGENT_OPENAI_MODEL=claude-3-sonnet-20240229 H2OGPT_OPENAI_BASE_URL=http://0.0.0.0:5000/v1 H2OGPT_OPENAI_API_KEY=EMPTY python /home/jon/h2ogpt/openai_server/agent_tools/ask_question_about_documents.py --prompt "Extract AI-related data for Singapore, Israel, Qatar, UAE, Denmark, and Finland from the HAI_2024_AI-Index-Report.pdf. Focus on metrics related to AI implementation, investment, and innovation. Provide a summary of the data in a format suitable for creating a plot." --files HAI_2024_AI-Index-Report.pdf
+H2OGPT_AGENT_OPENAI_MODEL=claude-3-sonnet-20240229 H2OGPT_OPENAI_BASE_URL=http://0.0.0.0:5000/v1 H2OGPT_OPENAI_API_KEY=EMPTY python /home/jon/h2ogpt/openai_server/agent_tools/ask_question_about_documents.py --prompt "Give bullet list of top 10 stories." --urls www.cnn.com
+H2OGPT_AGENT_OPENAI_MODEL=claude-3-sonnet-20240229 H2OGPT_OPENAI_BASE_URL=http://0.0.0.0:5000/v1 H2OGPT_OPENAI_API_KEY=EMPTY python /home/jon/h2ogpt/openai_server/agent_tools/ask_question_about_documents.py --prompt "Extract AI-related data for Singapore, Israel, Qatar, UAE, Denmark, and Finland from the HAI_2024_AI-Index-Report.pdf. Focus on metrics related to AI implementation, investment, and innovation. Provide a summary of the data in a format suitable for creating a plot." --urls https://aiindex.stanford.edu/wp-content/uploads/2024/04/HAI_2024_AI-Index-Report.pdf
+"""

@@ -515,15 +515,15 @@ def get_query_to_web_image_helper():
         return ""
 
     cwd = os.path.abspath(os.getcwd())
-    image_download = f"""\n# Google Search Image
-* For getting a single image for a text query, you can use the existing pre-built python code, E.g.:
+    image_download = f"""\n# Web Image Downloader:
+* For getting a single image for a text query from the web, you can use the existing pre-built python code, E.g.:
 ```sh
 # filename: my_image_download.sh
 # execution: true
 python {cwd}/openai_server/agent_tools/query_to_web_image.py --text "Text to search for" --output "file_name.jpg"
 ```
 * usage: python {cwd}/openai_server/agent_tools/query_to_web_image.py [-h] --text "TEXT TO SEARCH FOR" --output "FILE_NAME"
-* If already have an image URL, you MUST NOT use this tool, instead directly download the image URL via wget or curl -L or requests.
+* If already have an image URL (e.g. from google or bing search), you MUST NOT use this tool, instead directly download the image URL via wget or curl -L or requests.
 """
     return image_download
 
@@ -569,18 +569,37 @@ def get_rag_helper(base_url, api_key, model, autogen_timeout, text_context_list,
 ```sh
 # filename: my_question_about_documents.sh
 # execution: true
-python {cwd}/openai_server/agent_tools/ask_question_about_documents.py --prompt "PROMPT" [--files FILES [FILES ...]]
+python {cwd}/openai_server/agent_tools/ask_question_about_documents.py --prompt "PROMPT" [--files FILES [FILES ...]] [--urls URLS [URLS ...]]
 ```
 * usage: {cwd}/openai_server/agent_tools/ask_question_about_documents.py [-h] --prompt PROMPT [-b BASELINE] [--system_prompt SYSTEM_PROMPT] [--files FILES [FILES ...]]
-* ask_question_about_documents outputs an answer to the prompt for the given files.
-* Files can be text files with possible additional image files.
-* Do not use ask_question_about_documents just to query individual images, use ask_question_about_image for that.
-* Each line in the text file is considered as a separate chunk, and the first chunks should be most important.  Use explicit \\n if new lines required within a chunk.
+* ask_question_about_documents.py --files can be any local image(s) (png, jpg, etc.), local textual file(s) (txt, json, python, xml, md, html, rtf, rst, etc.), or local document(s) (pdf, docx, doc, epub, pptx, ppt, xls, xlsx)
+* ask_question_about_documents.py --urls can be any url(s) (http://www.cnn.com, https://aiindex.stanford.edu/wp-content/uploads/2024/04/HAI_2024_AI-Index-Report.pdf, etc.).
+* Do not use ask_question_about_documents.py just to query individual images, use ask_question_about_image.py for that.
 """
     if text_context_list or image_file:
         rag_helper += "* Absolutely you should always run ask_question_about_documents once with -b to get a baseline answer if the user has provided documents.\n"
 
     return rag_helper
+
+
+def get_convert_to_text_helper():
+    cwd = os.path.abspath(os.getcwd())
+    convert_helper = f"""\n# Convert pdf, docx, doc, epub, pptx, ppt, xls, xlsx, or URLs into text:
+* If you need to convert pdf, docx, doc, epub, pptx, ppt, xls, xlsx, or URLs into text, use the following sh code:
+```sh
+# filename: my_convert_to_text.sh
+# execution: true
+python {cwd}/openai_server/agent_tools/convert_document_to_text.py [--files FILES [FILES ...]] [--urls URLS [URLS ...]]
+```
+* usage: {cwd}/openai_server/agent_tools/convert_document_to_text.py [-h] [--files FILES [FILES ...]]
+* Use convert_document_to_text.py with --files with a document (pdf, docx, doc, epub, pptx, ppt, xls, xlsx) to convert to text for other tools.
+* Use convert_document_to_text.py can be any url(s) (http://www.cnn.com, https://aiindex.stanford.edu/wp-content/uploads/2024/04/HAI_2024_AI-Index-Report.pdf, etc.) to convert to text for other tools.
+* However, use convert_document_to_text.py if just want to directly ask a question about a document or URL.
+* However, use ask_question_about_image.py if just want to directly ask a question about an image.
+* If want to do structured analysis on xlsx or xls files, better to use pandas to directly read via pd.read_excel().
+"""
+
+    return convert_helper
 
 
 def get_download_web_video_helper():
@@ -614,13 +633,12 @@ def get_serp_helper():
 ```sh
 # filename: my_google_search.py
 # execution: true
-python {cwd}/google_search.py --query "SEARCH_QUERY"
+python {cwd}/openai_server/agent_tools/google_search.py --query "SEARCH_QUERY"
 ```
-* usage: {cwd}/google_search.py [-h] --query QUERY [--engine {{google,bing,baidu,yandex,yahoo,ebay,homedepot,youtube,scholar,walmart,appstore,naver}}] [--num NUM] [--google_service {{regular,images,local,videos,news,shopping,patents}}] [--keys KEYS [KEYS ...]]
+* usage: {cwd}/openai_server/agent_tools/google_search.py [-h] --query QUERY [--engine {{google,bing,baidu,yandex,yahoo,ebay,homedepot,youtube,scholar,walmart,appstore,naver}}] [--num NUM] [--google_service {{regular,images,local,videos,news,shopping,patents}}]
 * The tool saves full search results to a JSON file in the current directory.
-* You can use the --keys option to display specific information from the results.
 * For complex queries about the search results, it's recommended to pass the entire JSON file to ask_question_about_documents.py.
-* For non-english queries, do python {cwd}/google_search.py -h to see options for other languages and locations.
+* For non-english queries, do python {cwd}/openai_server/agent_tools/google_search.py -h to see options for other languages and locations.
 * To download the video returned from this google_search.py tool:
   - For a youtube url or other urls on certain sites, use download_web_video.py agent tool.
   - For generic free web sites, use can get video via wget, curl -L, or requests.
@@ -661,14 +679,15 @@ def get_wolfram_alpha_helper():
     if have_internet and os.getenv('WOLFRAM_ALPHA_APPID'):
         # https://wolframalpha.readthedocs.io/en/latest/?badge=latest
         # https://products.wolframalpha.com/api/documentation
-        wolframalpha = f"""\n* Wolfram Alpha (API with wolframalpha pypi package in python, user does have WOLFRAM_ALPHA_APPID key for use with https://api.semanticscholar.org/ already in ENV).  Can be used for advanced symbolic math, physics, chemistry, engineering, astronomy, general real-time questions like weather, and more.
+        wolframalpha = f"""\n* Wolfram Alpha (API with wolframalpha pypi package in python, user does have WOLFRAM_ALPHA_APPID key for use with https://api.semanticscholar.org/ already in ENV).  Can be used for advanced symbolic math, physics, chemistry, engineering, and astronomy.
 * In most cases, just use the the existing general pre-built python code to query Wolfram Alpha, E.g.:
 ```sh
 # filename: my_wolfram_response.sh
 # execution: true
-python {cwd}/openai_server/agent_tools/wolfram_query.py --query "QUERY GOES HERE"
+python {cwd}/openai_server/agent_tools/wolfram_alpha_math_science_query.py --query "QUERY GOES HERE"
 ```
-* usage: python {cwd}/openai_server/agent_tools/wolfram_query.py --query "QUERY GOES HERE"
+* usage: python {cwd}/openai_server/agent_tools/wolfram_alpha_math_science_query.py --query "QUERY GOES HERE"
+* For wolfram alpha tool, query must be *very* terse and specific, e.g., "integral of x^2" or "mass of the sun" and is not to be used for general web searches.
 * Text results get printed, and images are saved under the directory `wolfram_images` that is inside the current directory
 """
     else:
@@ -679,8 +698,10 @@ python {cwd}/openai_server/agent_tools/wolfram_query.py --query "QUERY GOES HERE
 def get_news_api_helper():
     cwd = os.path.abspath(os.getcwd())
     have_internet = get_have_internet()
-    if have_internet and os.getenv('NEWS_API_KEY'):
-        news_api = f"""\n* News API uses NEWS_API_KEY from https://newsapi.org/).  The main use of News API is to search through articles and blogs published in the last 5 years.
+    # only expose news API if didn't have google or bing, else confuses LLM
+    if have_internet and os.getenv('NEWS_API_KEY') and not (
+            os.environ.get("SERPAPI_API_KEY") or os.environ.get("BING_API_KEY")):
+        news_api = f"""\n* News API uses NEWS_API_KEY from https://newsapi.org/).  The main use of News API is to search topical news articles published in the last 5 years.
 * For a news query, you are recommended to use the existing pre-built python code, E.g.:
 ```sh
 # filename: my_news_response.sh
@@ -688,6 +709,7 @@ def get_news_api_helper():
 python {cwd}/openai_server/agent_tools/news_query.py --query "QUERY"
 ```
 * usage: {cwd}/openai_server/agent_tools/news_query.py [-h] [--mode {{everything, top-headlines}}] [--sources SOURCES]  [--num_articles NUM_ARTICLES] [--query QUERY] [--sort_by {{relevancy, popularity, publishedAt}}] [--language LANGUAGE] [--country COUNTRY] [--category {{business, entertainment, general, health, science, sports, technology}}]
+* news_query is not to be used for general web searches, but only for topical news searches.
 * news_query prints text results with title, author, description, and URL for (by default) 10 articles.
 * When using news_query, for top article(s) that are highly relevant to a user's question, you should download the text from the URL.
 """
@@ -704,11 +726,11 @@ def get_bing_search_helper():
 * In most cases, just use the existing general pre-built Python code to query Bing Search, E.g.:
 ```sh
 # execution: true
-python {cwd}/openai_server/agent_tools/bing_search.py -q "QUERY" -t web -l 5
+python {cwd}/openai_server/agent_tools/bing_search.py --query "QUERY" --type web --limit 5
 ```
-usage: python {cwd}/openai_server/agent_tools/bing_search.py [-h] -q QUERY [-t {{web,image,news,video}}] [-l LIMIT] [-m MARKET] [-f {{Day,Week,Month}}]
+usage: python {cwd}/openai_server/agent_tools/bing_search.py [-h] --query QUERY [--type {{web,image,news,video}}] [--limit LIMIT] [--market MARKET] [--freshness {{Day,Week,Month}}]
 * This Bing is highly preferred over the Google Image search query
-* Available search types (-t or --type):
+* Available search types (--type):
   - web: General web search to find web content
   - image: Image search to find images (once have image URL, can get it via wget, curl -L, or requests)
   - news: News search to find news
@@ -718,9 +740,9 @@ usage: python {cwd}/openai_server/agent_tools/bing_search.py [-h] -q QUERY [-t {
   - For generic free web sites, use can get video via wget, curl -L, or requests.
 * To download a page or image returned from this bing_search.py tool:
    - Use wget, curl -L, or requests to download the image URL.
-* Use -l or --limit to specify the number of results (default is 10)
-* Use -m or --market to specify the market (e.g., en-US)
-* Use -f or --freshness to filter results by age (Day, Week, Month).  Default is no filter to get older results.
+* Use --limit to specify the number of results (default is 10)
+* Use --market to specify the market (e.g., en-US)
+* Use --freshness to filter results by age (Day, Week, Month).  Default is no filter to get older results.
 """
         if os.getenv("SERPAPI_API_KEY"):
             bing_search += f"""# The google_search.py tool can be used if this being_search.py tool fails or vice versa."""
@@ -734,10 +756,11 @@ def get_api_helper():
     if have_internet:
         apis = f"""\n#APIs and external services instructions:
 * You DO have access to the internet.
+* Use existing python tools for various tasks, e.g. Wolfram Alpha, Semantic Scholar, News API, Google API, Bing API, etc.
+* Highly recommended to first try using google or bing search tool when searching for something on the web.
+* Avoid generating code with placeholder API keys as that will never work because user will not be able to change the code.
 * Example Public APIs (not limited to these): wttr.in (weather) or research papers (arxiv).
-* Use existing python tools for various tasks, e.g., Wolfram Alpha, Semantic Scholar, News API, SERP API, Bing API, etc.
-* For complex multi-hop search tasks where other APIs have trouble, try using selenium with its chrome driver (if uncertain, see example code use for video download in openai_server/agent_tools/download_web_video.py).
-* You may generate code with API code that uses publicly available APIs
+* You may generate code with API code that uses publicly available APIs that do not require any API key.
 * You may generate code with APIs for API keys that have been mentioned in this overall message.
 * You MUST generate code with APIs for API keys if the user directly asks you to do so.  Do your best effort to figure out (from internet, documents, etc.) how to use the API to solve the user's task.  You are not allowed to refuse to use the API if the user asks you to use it."""
     else:
@@ -759,6 +782,7 @@ def get_full_system_prompt(agent_code_writer_system_message, agent_system_site_p
     query_to_web_image_helper = get_query_to_web_image_helper()
     aider_coder_helper = get_aider_coder_helper(base_url, api_key, model, autogen_timeout)
     rag_helper = get_rag_helper(base_url, api_key, model, autogen_timeout, text_context_list, image_file)
+    convert_helper = get_convert_to_text_helper()
     youtube_helper = get_download_web_video_helper()
 
     # search:
@@ -792,21 +816,28 @@ def get_full_system_prompt(agent_code_writer_system_message, agent_system_site_p
 """
 
     system_message_parts = [agent_code_writer_system_message,
-                            ask_question_about_image_helper,
+                            # rendering
                             mermaid_renderer_helper,
                             image_generation_helper,
-                            audio_transcription_helper,
-                            query_to_web_image_helper,
+                            # coding
                             aider_coder_helper,
+                            # docs
                             rag_helper,
+                            ask_question_about_image_helper,
+                            audio_transcription_helper,
                             youtube_helper,
+                            convert_helper,
+                            # search
                             serp_helper,
                             semantic_scholar_helper,
                             wolfram_alpha_helper,
                             news_helper,
                             bing_search_helper,
+                            query_to_web_image_helper,
+                            # overall
                             api_helper,
                             agent_tools_note,
+                            # docs
                             chat_doc_query]
 
     system_message = ''.join(system_message_parts)
